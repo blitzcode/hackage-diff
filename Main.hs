@@ -339,7 +339,7 @@ diffHoogleDB dbA dbB = do
                                     Nothing -> error "intersectBy / find is broken..."
                                     Just eNew | compareDBEType eOld eNew ->
                                                     (EUnmodified, show eOld)
-                                              | otherwise                     ->
+                                              | otherwise                ->
                                                     (EModified $ show eOld, show eNew)
         -- Sort everything by modification type, but make sure we sort
         -- modified modules by their name, not their export list
