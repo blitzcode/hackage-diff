@@ -2,73 +2,60 @@
 
 Compare the public API of different versions of a Hackage library.
 
-Sample output for `hackage-diff mtl 2.0.1.1 2.2.1`:
+Sample output for `hackage-diff cereal 0.2 0.3.5.2`:
 
 ```
 Downloading Hoogle DBs...
 Parsing Hoogle DBs...
 Comparing Hoogle DBs...
 
---- Diff for | 2.0.1.1 → 2.2.1 | ---
+--- Diff for | 0.2 → 0.3.5.2 | ---
 
-+ Control.Monad.Except
-  + type Except e = ExceptT e Identity
-  + newtype ExceptT e (m :: * -> *) a :: * -> (* -> *) -> * -> *
-  + ExceptT :: m (Either e a) -> ExceptT e a
-  + class Monad m => MonadError e m | m -> e
-  + catchError :: MonadError e m => m a -> (e -> m a) -> m a
-  + mapExcept :: (Either e a -> Either e' b) -> Except e a -> Except e' b
-  + mapExceptT :: (m (Either e a) -> n (Either e' b)) -> ExceptT e m a -> ExceptT e' n b
-  + runExcept :: Except e a -> Either e a
-  + runExceptT :: ExceptT e m a -> m (Either e a)
-  + throwError :: MonadError e m => e -> m a
-  + withExcept :: (e -> e') -> Except e a -> Except e' a
-  + withExceptT :: Functor m => (e -> e') -> ExceptT e m a -> ExceptT e' m a
-× Control.Monad.Cont
-× Control.Monad.Cont.Class
-  + instance MonadCont m => MonadCont (ExceptT e m)
-× Control.Monad.Error
-× Control.Monad.Error.Class
-  + instance Monad m => MonadError e (ExceptT e m)
-  + instance MonadError e (Either e)
-  - instance Error e => MonadError e (Either e)
-× Control.Monad.RWS.Class
-  + instance MonadRWS r w s m => MonadRWS r w s (ExceptT e m)
-× Control.Monad.RWS.Lazy
-× Control.Monad.RWS.Strict
-× Control.Monad.Reader
-  × New: reader :: MonadReader r m => (r -> a) -> m a
-    Old: reader :: (r -> a) -> Reader r a
-× Control.Monad.Reader.Class
-  + instance MonadReader r m => MonadReader r (ExceptT e m)
-  + reader :: MonadReader r m => (r -> a) -> m a
-× Control.Monad.State.Class
-  + instance MonadState s m => MonadState s (ExceptT e m)
-  + modify' :: MonadState s m => (s -> s) -> m ()
-  + state :: MonadState s m => (s -> (a, s)) -> m a
-× Control.Monad.State.Lazy
-  + modify' :: MonadState s m => (s -> s) -> m ()
-  × New: state :: MonadState s m => (s -> (a, s)) -> m a
-    Old: state :: (s -> (a, s)) -> State s a
-× Control.Monad.State.Strict
-  + modify' :: MonadState s m => (s -> s) -> m ()
-  × New: state :: MonadState s m => (s -> (a, s)) -> m a
-    Old: state :: (s -> (a, s)) -> State s a
-× Control.Monad.Writer.Class
-  + instance MonadWriter w m => MonadWriter w (ExceptT e m)
-  + writer :: MonadWriter w m => (a, w) -> m a
-× Control.Monad.Writer.Lazy
-  × New: writer :: MonadWriter w m => (a, w) -> m a
-    Old: writer :: (a, w) -> Writer w a
-× Control.Monad.Writer.Strict
-  × New: writer :: MonadWriter w m => (a, w) -> m a
-    Old: writer :: (a, w) -> Writer w a
-· Control.Monad.Identity
-· Control.Monad.List
-· Control.Monad.RWS
-· Control.Monad.State
-· Control.Monad.Trans
-· Control.Monad.Writer
++ Data.Serialize.IEEE754
+  + getFloat32be :: Get Float
+  + getFloat32le :: Get Float
+  + getFloat64be :: Get Double
+  + getFloat64le :: Get Double
+  + putFloat32be :: Float -> Put
+  + putFloat32le :: Float -> Put
+  + putFloat64be :: Double -> Put
+  + putFloat64le :: Double -> Put
+× Data.Serialize
+  + instance Serialize a => GSerialize (K1 i a)
+  + instance GSerialize a => GSerialize (M1 i c a)
+  + instance (GSerialize a, GSerialize b) => GSerialize (a :*: b)
+  + instance GSerialize U1
+  + instance GSerialize a => GetSum (C1 c a)
+  + instance (GetSum a, GetSum b, GSerialize a, GSerialize b) => GetSum (a :+: b)
+  + instance GSerialize a => PutSum (C1 c a)
+  + instance (PutSum a, PutSum b, GSerialize a, GSerialize b) => PutSum (a :+: b)
+  + instance SumSize (C1 c a)
+  + instance (SumSize a, SumSize b) => SumSize (a :+: b)
+  + decodeLazy :: Serialize a => ByteString -> Either String a
+  + encodeLazy :: Serialize a => a -> ByteString
+  - data Get a
+  - type Put = PutM ()
+  - type Putter a = a -> Put
+  - getWord8 :: Get Word8
+  - putWord8 :: Putter Word8
+× Data.Serialize.Get
+  + Done :: r -> ByteString -> Result r
+  + instance Eq More
+  + Fail :: String -> Result r
+  + instance Functor Result
+  + Partial :: (ByteString -> Result r) -> Result r
+  + data Result r
+  + instance Show r => Show (Result r)
+  + ensure :: Int -> Get ByteString
+  + runGetLazy :: Get a -> ByteString -> Either String a
+  + runGetLazyState :: Get a -> ByteString -> Either String (a, ByteString)
+  + runGetPartial :: Get a -> ByteString -> Result a
+  × New: isolate :: Int -> Get a -> Get a
+    Old: isolate :: String -> Int -> Get a -> Get a
+× Data.Serialize.Put
+  + runPutLazy :: Put -> ByteString
+  + runPutMLazy :: PutM a -> (a, ByteString)
+· Data.Serialize.Builder
 
 [+ Added] [- Removed] [× Modified] [· Unmodified]
 

@@ -31,7 +31,7 @@ import Distribution.PackageDescription.Parse
 import Distribution.Verbosity (normal)
 import Distribution.Simple.Utils (findPackageDesc)
 import Distribution.ModuleName (toFilePath, components)
-import Language.Haskell.Exts
+import Language.Haskell.Exts as E
 import Language.Preprocessor.Cpphs
 import Network.HTTP
 
@@ -336,9 +336,7 @@ diffHoogleDB dbA dbB = do
                             flip map (intersectBy compareDBEName modA modB) $ \eOld ->
                                 case find (compareDBEName eOld) modB of
                                     Nothing -> error "intersectBy / find is broken..."
-                                    -- TODO: The comparison we do here is pretty stupid, i.e.
-                                    --       'id :: a -> a' and 'id :: x -> x' would be different
-                                    Just eNew | ((==) `on` dbeType) eOld eNew ->
+                                    Just eNew | compareDBEType eOld eNew ->
                                                     (EUnmodified, show eOld)
                                               | otherwise                     ->
                                                     (EModified $ show eOld, show eNew)
@@ -377,6 +375,51 @@ compareDBEName a b = case (a, b) of
     (DBInstance _ _, DBInstance _ _) -> cmp; (DBFunction _ _, DBFunction _ _) -> cmp;
     _ -> False
   where cmp = ((==) `on` dbeName) a b
+
+-- Compare the type of two entries. If we simply compare the type string, we will
+-- have mistakes like classifying those two functions as having a change in type:
+--
+-- func ::  Num a  => a -> a
+-- func :: (Num a) => a -> a
+--
+-- So we try to parse the type with haskell-src-exts and then fall back on a string
+-- compare if that fails. Parsing again every time the comparison function is called is
+-- obviously rather slow, but it hasn't been an issue so far
+--
+compareDBEType :: DBEntry -> DBEntry -> Bool
+compareDBEType a b =
+    -- We assume that a and b are the same kind of export (i.e. they have already been
+    -- matched with dbeName, which only compares exports of the same kind), and now we
+    -- want to know if the type differs between them
+    case a of
+        -- The syntax we use to list exported Ctors and their types can't be parsed as a
+        -- declaration, just compare the type part
+        DBCtor _ _    -> case ( parseTypeWithMode mode . T.unpack $ dbeType a
+                              , parseTypeWithMode mode . T.unpack $ dbeType b
+                              ) of
+                           (E.ParseOk resA, E.ParseOk resB) -> resA == resB
+                           _                                -> stringTypeCmp
+        -- Also can't parse our type / newtype syntax, fall back to string compare
+        DBType _ _    -> stringTypeCmp
+        DBNewtype _ _ -> stringTypeCmp
+        -- Parse everything else in its entirety as a top-level declaration
+        _             -> case ( parseDeclWithMode mode $ show a
+                              , parseDeclWithMode mode $ show b
+                              ) of
+                           (E.ParseOk resA, E.ParseOk resB) -> resA == resB
+                           _                                -> stringTypeCmp
+  where mode = -- Enable some common extension to make parsing more likely to succeed
+               defaultParseMode
+               {
+                   extensions = [ EnableExtension FunctionalDependencies
+                                , EnableExtension MultiParamTypeClasses
+                                , EnableExtension TypeOperators
+                                , EnableExtension KindSignatures
+                                , EnableExtension MagicHash
+                                , EnableExtension FlexibleContexts
+                                ]
+               }
+        stringTypeCmp = ((==) `on` dbeType) a b
 
 -- Extract a database entry's "name" (i.e. a function name vs its type)
 dbeName :: DBEntry -> T.Text
@@ -507,9 +550,9 @@ parseModule modPath = runExceptT $ do
         parseFileContentsWithMode defaultParseMode { parseFilename = modPath } modSrcCPP)
             >>= \case Left (e :: ErrorCall) ->
                           throwError $ "Haskell Parse Exception - " ++ show e
-                      Right (Language.Haskell.Exts.ParseFailed (SrcLoc fn ln cl) err) ->
+                      Right (E.ParseFailed (SrcLoc fn ln cl) err) ->
                           throwError $ printf "Haskell Parse Error - %s:%i:%i: %s" fn ln cl err
-                      Right (Language.Haskell.Exts.ParseOk parsedModule) ->
+                      Right (E.ParseOk parsedModule) ->
                           return parsedModule
 
 type PackageModuleList = [(String, Maybe Module)]
