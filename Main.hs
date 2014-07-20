@@ -15,6 +15,7 @@ import System.Console.GetOpt
 import System.Console.ANSI
 import Control.Monad
 import Control.Monad.Except
+import Control.Monad.State
 import Control.Applicative
 import Control.Exception
 import Control.Concurrent.Async
@@ -159,11 +160,11 @@ type Diff = [(ModuleCmp, String)]
 outputDiff :: Diff -> Bool -> Bool -> IO ()
 outputDiff diff disableColor disableLengend = do
     let putStrCol color str
-            | disableColor = putStr str
-            | otherwise    = putStr $ setSGRCode [SetColor Foreground Vivid color] ++
-                                      str ++ setSGRCode [Reset]
-        putStrLnCol color str = putStrCol color str >> putStrLn "" 
-    forM_ diff $ \case
+            | disableColor = liftIO $ putStr str
+            | otherwise    = liftIO . putStr $ setSGRCode [SetColor Foreground Vivid color] ++
+                                               str ++ setSGRCode [Reset]
+        putStrLnCol color str = liftIO $ putStrCol color str >> putStrLn "" 
+    breakingChanges <- flip execStateT (0 :: Int) . forM_ diff $ \case
         (MAdded exps                 , mname) -> do
             putStrLnCol Green $ "+ " ++ mname
             mapM_ (putStrLnCol Green . printf "  + %s") exps
@@ -172,21 +173,24 @@ outputDiff diff disableColor disableLengend = do
                 printf " + %s (ERROR: failed to parse new version, exports not available)" mname
         (MRemoved exps               , mname) -> do
             putStrLnCol Red $ "- " ++ mname
-            mapM_ (putStrLnCol Red . printf "  - %s") exps
-        (MRemovedParseError          , mname) ->
+            mapM_ (\e -> modify' (+ 1) >> putStrLnCol Red (printf "  - %s" e)) exps
+        (MRemovedParseError          , mname) -> do
+            modify' (+ 1)
             putStrLnCol Red $
                 " - " ++ mname ++ " (ERROR: failed to parse old version, exports not available)"
-        (MNotSureIfModifiedParseError, mname) ->
+        (MNotSureIfModifiedParseError, mname) -> do
             putStrLnCol Yellow $ "× " ++ mname ++
                 " (Potentially modified, ERROR: failed to parse new and/or old version)"
         (MModified exps              , mname) -> do
             putStrLnCol Yellow $ "× " ++ mname
             forM_ exps $ \(cmp, expname) -> case cmp of
-              EAdded        -> putStrLnCol Green  $ "  + "      ++ expname
-              ERemoved      -> putStrLnCol Red    $ "  - "      ++ expname
-              EModified old -> putStrLnCol Yellow $ "  × New: " ++ expname ++ "\n" ++
-                                                    "    Old: " ++ old
-              EUnmodified  -> return ()
+                EAdded        ->    putStrLnCol Green  $ "  + "      ++ expname
+                ERemoved      -> do modify' (+ 1)
+                                    putStrLnCol Red    $ "  - "      ++ expname
+                EModified old -> do modify' (+ 1)
+                                    putStrLnCol Yellow $ "  × New: " ++ expname ++ "\n" ++
+                                                         "    Old: " ++ old
+                EUnmodified   -> return ()
         (MUnmodifed                  , mname) -> putStrLnCol White $ "· " ++ mname
     unless disableLengend $ do
         putStrLn ""
@@ -194,6 +198,8 @@ outputDiff diff disableColor disableLengend = do
         putStrCol Red    "[- Removed] "
         putStrCol Yellow "[× Modified] "
         putStrCol White  "[· Unmodified]\n"
+    unless (breakingChanges == 0) $
+        putStrLnCol Red $ printf "\n%i potential breaking changes found" breakingChanges
 
 -- All the parameters required by the various compute* functions that actually prepare the
 -- data and compute the difference
