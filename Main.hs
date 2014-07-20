@@ -279,11 +279,11 @@ computeDiffBuildHoogleDB ComputeParams { .. } =
         either throwError return $ parseOnly hoogleDBParser db
     -- Compare
     return $ diffHoogleDB parsedDBA parsedDBB
-  where putS = unless cpSilentFlag . liftIO . putStrLn
-        getHoogleDBPath ver = cpTmpDir </> cpPackage ++ "-" ++ ver </> "dist/doc/html" </>
-                              cpPackage </> cpPackage <.> "txt"
-        tip = "\nIf downloading / building Hoogle DBs fails, you can try directly parsing " ++
-              "the source files by running with --mode=parsehs"
+  where
+    putS = unless cpSilentFlag . liftIO . putStrLn
+    getHoogleDBPath ver = cpTmpDir </> ver </> "dist/doc/html" </> cpPackage </> cpPackage <.> "txt"
+    tip = "\nIf downloading / building Hoogle DBs fails, you can try directly parsing " ++
+          "the source files by running with --mode=parsehs"
 
 -- Compare two packages made up of readily parsed Hoogle DBs
 diffHoogleDB :: [DBEntry] -> [DBEntry] -> Diff
