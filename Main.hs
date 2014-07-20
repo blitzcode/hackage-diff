@@ -322,15 +322,16 @@ diffHoogleDB dbA dbB = do
                     (_   , Nothing  )  -> -- This really should not ever happen here
                                           (MNotSureIfModifiedParseError, T.unpack mname)
                     (modA, Just modB)
-                        | modA == modB -> (MUnmodifed                  , T.unpack mname)
-                        | otherwise    -> (MModified expCmp            , T.unpack mname)
+                        | didExpChange -> (MModified expCmp            , T.unpack mname)
+                        | otherwise    -> (MUnmodifed                  , T.unpack mname)
                       where -- Which exports were added / removed / modified?
-                        expCmp        = expAdded ++ expRemoved ++ expKept
-                        expAdded      =
+                        didExpChange = or $ map (\case (EUnmodified, _) -> False; _ -> True) expCmp
+                        expCmp       = expAdded ++ expRemoved ++ expKept
+                        expAdded     =
                             [(EAdded  , show x) | x <- allANotInBBy compareDBEName modB modA]
-                        expRemoved    =
+                        expRemoved   =
                             [(ERemoved, show x) | x <- allANotInBBy compareDBEName modA modB]
-                        expKept       =
+                        expKept      =
                             -- We don't sort by modified / unmodified here as we currently
                             -- don't list the unmodified ones
                             flip map (intersectBy compareDBEName modA modB) $ \eOld ->
