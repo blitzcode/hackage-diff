@@ -101,7 +101,7 @@ getCmdOpt progName args =
     opt    = [ Option []
                       ["mode"]
                       (ReqArg FlagMode "[downloaddb|builddb|parsehs]")
-                      ( "what to download, how to compare\n" ++ 
+                      ( "what to download, how to compare\n" ++
                         "  downloaddb - download Hoogle DBs and diff (Default)\n" ++
                         "  builddb    - download packages, build Hoogle DBs and diff\n" ++
                         "  parsehs    - download packages, directly diff .hs exports"
@@ -163,7 +163,7 @@ outputDiff diff disableColor disableLengend = do
             | disableColor = liftIO $ putStr str
             | otherwise    = liftIO . putStr $ setSGRCode [SetColor Foreground Vivid color] ++
                                                str ++ setSGRCode [Reset]
-        putStrLnCol color str = liftIO $ putStrCol color str >> putStrLn "" 
+        putStrLnCol color str = liftIO $ putStrCol color str >> putStrLn ""
     breakingChanges <- flip execStateT (0 :: Int) . forM_ diff $ \case
         (MAdded exps                 , mname) -> do
             putStrLnCol Green $ "+ " ++ mname
@@ -328,7 +328,7 @@ diffHoogleDB dbA dbB = do
                         expCmp        = expAdded ++ expRemoved ++ expKept
                         expAdded      =
                             [(EAdded  , show x) | x <- allANotInBBy compareDBEName modB modA]
-                        expRemoved    = 
+                        expRemoved    =
                             [(ERemoved, show x) | x <- allANotInBBy compareDBEName modA modB]
                         expKept       =
                             -- We don't sort by modified / unmodified here as we currently
@@ -362,7 +362,7 @@ data DBEntry = DBModule   !T.Text
              | DBData     !T.Text !T.Text
              | DBCtor     !T.Text !T.Text
              | DBClass    !T.Text !T.Text
-             | DBInstance !T.Text
+             | DBInstance !T.Text !T.Text
              | DBFunction !T.Text !T.Text
                deriving (Eq)
 
@@ -370,12 +370,12 @@ data DBEntry = DBModule   !T.Text
 -- type and value constructors may have the same name without being identical
 compareDBEName :: DBEntry -> DBEntry -> Bool
 compareDBEName a b = case (a, b) of
-    (DBModule _    ,  DBModule _    ) -> cmp; (DBPkgInfo _ _ ,  DBPkgInfo _ _ ) -> cmp;
-    (DBComment _   ,  DBComment _   ) -> cmp; (DBType _ _    ,  DBType _ _    ) -> cmp;
-    (DBNewtype _ _ ,  DBNewtype _ _ ) -> cmp; (DBData _ _    ,  DBData _ _    ) -> cmp;
-    (DBCtor _ _    ,  DBCtor _ _    ) -> cmp; (DBClass _ _   ,  DBClass _ _   ) -> cmp;
-    (DBInstance _  ,  DBInstance _  ) -> cmp; (DBFunction _ _,  DBFunction _ _) -> cmp;
-    _ -> False 
+    (DBModule _    , DBModule _    ) -> cmp; (DBPkgInfo _ _ , DBPkgInfo _ _ ) -> cmp;
+    (DBComment _   , DBComment _   ) -> cmp; (DBType _ _    , DBType _ _    ) -> cmp;
+    (DBNewtype _ _ , DBNewtype _ _ ) -> cmp; (DBData _ _    , DBData _ _    ) -> cmp;
+    (DBCtor _ _    , DBCtor _ _    ) -> cmp; (DBClass _ _   , DBClass _ _   ) -> cmp;
+    (DBInstance _ _, DBInstance _ _) -> cmp; (DBFunction _ _, DBFunction _ _) -> cmp;
+    _ -> False
   where cmp = ((==) `on` dbeName) a b
 
 -- Extract a database entry's "name" (i.e. a function name vs its type)
@@ -383,7 +383,7 @@ dbeName :: DBEntry -> T.Text
 dbeName = \case
     DBModule nm     -> nm; DBPkgInfo k _   -> k ; DBComment _     -> "";
     DBType nm _     -> nm; DBNewtype nm _  -> nm; DBData nm _     -> nm;
-    DBCtor nm _     -> nm; DBClass nm _    -> nm; DBInstance ty   -> ty;
+    DBCtor nm _     -> nm; DBClass nm _    -> nm; DBInstance nm _ -> nm;
     DBFunction nm _ -> nm
 
 -- Extract a database entry's "type" (i.e. a function type vs its name)
@@ -391,7 +391,7 @@ dbeType :: DBEntry -> T.Text
 dbeType = \case
     DBModule _      -> "";  DBPkgInfo _ v   -> v ; DBComment _     -> "";
     DBType _ ty     -> ty;  DBNewtype _ ty  -> ty; DBData _ ty     -> ty;
-    DBCtor _ ty     -> ty;  DBClass _ ty    -> ty; DBInstance ty   -> ty;
+    DBCtor _ ty     -> ty;  DBClass _ ty    -> ty; DBInstance _ ty -> ty;
     DBFunction _ ty -> ty
 
 instance Show DBEntry where
@@ -404,48 +404,55 @@ instance Show DBEntry where
     DBData nm ty     -> "data " ++ T.unpack nm ++ (if T.null ty then "" else " " ++ T.unpack ty)
     DBCtor nm ty     -> T.unpack nm ++ " :: " ++ T.unpack ty
     DBClass _ ty     -> "class " ++ T.unpack ty
-    DBInstance ty    -> "instance " ++ T.unpack ty
+    DBInstance _ ty  -> "instance " ++ T.unpack ty
     DBFunction nm ty -> T.unpack nm ++ " :: " ++ T.unpack ty
 
 -- Parse a Hoogle text database
 hoogleDBParser :: Parser [DBEntry]
 hoogleDBParser = many parseLine
   where
-    parseLine = (*>) skipEmpty $ parseComment  <|> parseData  <|> parsePkgInfo  <|>
-                                 parseDBModule <|> parseCtor  <|> parseNewtype  <|>
-                                 parseDBType   <|> parseClass <|> parseInstance <|>
-                                 parseFunction
-    parseComment = string "-- " *> (DBComment <$> tillEoL)
-    parsePkgInfo = char '@' *> (DBPkgInfo <$> takeTill (== ' ') <*> tillEoL)
-    parseData = string "data " *> 
-                ( (DBData <$> takeTill (`elem` [ ' ', '\n' ]) <* endOfLine <*> "") <|>
-                  (DBData <$> takeTill (== ' ') <* skipSpace <*> tillEoL)
-                )
-    parseNewtype = string "newtype " *> 
-                ( (DBNewtype <$> takeTill (`elem` [ ' ', '\n' ]) <* endOfLine <*> "") <|>
-                  (DBNewtype <$> takeTill (== ' ') <* skipSpace <*> tillEoL)
-                )
-    parseCtor = do peekChar' >>= flip unless (fail "lowercase") . isAsciiUpper
-                   DBCtor <$> takeTill (== ' ') <* string " :: " <*> tillEoL
+    parseLine     = (*>) skipEmpty $ parseComment  <|> parseData  <|> parsePkgInfo  <|>
+                                     parseDBModule <|> parseCtor  <|> parseNewtype  <|>
+                                     parseDBType   <|> parseClass <|> parseInstance <|>
+                                     parseFunction
+    parseComment  = string "-- " *> (DBComment <$> tillEoL)
+    parsePkgInfo  = char '@' *> (DBPkgInfo <$> takeTill (== ' ') <*> tillEoL)
+    parseData     = string "data " *>
+                    ( (DBData <$> takeTill (`elem` [ ' ', '\n' ]) <* endOfLine <*> "") <|>
+                      (DBData <$> takeTill (== ' ') <* skipSpace <*> tillEoL)
+                    )
+    parseNewtype  = string "newtype " *>
+                    ( (DBNewtype <$> takeTill (`elem` [ ' ', '\n' ]) <* endOfLine <*> "") <|>
+                      (DBNewtype <$> takeTill (== ' ') <* skipSpace <*> tillEoL)
+                    )
+    parseCtor     = do peekChar' >>= flip unless (fail "lowercase") . isAsciiUpper
+                       DBCtor <$> takeTill (== ' ') <* string " :: " <*> tillEoL
     parseFunction = do peekChar' >>=
                            flip unless (fail "uppercase") . (\c -> isAsciiLower c || c == '(')
                        DBFunction <$> takeTill (== ' ') <* string " :: " <*> tillEoL
-    parseInstance = string "instance " *> (DBInstance <$> tillEoL)
-    parseClass = do void $ string "class "
-                    line <- T.words <$> tillEoL
-                    let nm = case break (== "=>") line of
-                                 ((n:_), [])  -> n
-                                 (_, (_:n:_)) -> n
-                                 _            -> ""
-                        -- TODO: Sometimes typeclasses have all their default method
-                        --       implementations listed right after the 'where' part,
-                        --       just cut all of this off for now
-                        trunc = fst . break (== "where") $ line
-                     in return . DBClass nm $ T.unwords trunc
-    parseDBType = string "type " *> (DBType <$> takeTill (== ' ') <* skipSpace <*> tillEoL)
+    parseInstance = do void $ string "instance "
+                       line <- T.words <$> tillEoL
+                       -- The name of an instance is basically everything
+                       -- after the typeclass requirements
+                       let nm = case break (== "=>") line of
+                                    (xs, [])    -> T.unwords xs
+                                    (_, (_:xs)) -> T.unwords xs
+                       return . DBInstance nm $ T.unwords line
+    parseClass    = do void $ string "class "
+                       line <- T.words <$> tillEoL
+                       let nm = case break (== "=>") line of
+                                    ((n:_), [])  -> n
+                                    (_, (_:n:_)) -> n
+                                    _            -> ""
+                           -- TODO: Sometimes typeclasses have all their default method
+                           --       implementations listed right after the 'where' part,
+                           --       just cut all of this off for now
+                           trunc = fst . break (== "where") $ line
+                        in return . DBClass nm $ T.unwords trunc
+    parseDBType   = string "type " *> (DBType <$> takeTill (== ' ') <* skipSpace <*> tillEoL)
     parseDBModule = string "module " *> (DBModule <$> takeTill (== '\n')) <* endOfLine
-    skipEmpty = many endOfLine
-    tillEoL = takeTill (== '\n') <* endOfLine
+    skipEmpty     = many endOfLine
+    tillEoL       = takeTill (== '\n') <* endOfLine
 
 -- Compute a Diff by processing Haskell files directly. We use the Cabal API to locate and
 -- parse the package .cabal file, extract a list of modules from it, and then pre-process
