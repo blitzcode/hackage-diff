@@ -321,13 +321,9 @@ diffHoogleDB dbA dbB = do
                       where -- Which exports were added / removed / modified?
                         expCmp        = expAdded ++ expRemoved ++ expKept
                         expAdded      =
-                            [ (EAdded, show x)
-                              | x <- allANotInBBy compareDBEName modB modA
-                            ]
+                            [(EAdded  , show x) | x <- allANotInBBy compareDBEName modB modA]
                         expRemoved    = 
-                            [ (ERemoved, show x)
-                              | x <- allANotInBBy compareDBEName modA modB
-                            ]
+                            [(ERemoved, show x) | x <- allANotInBBy compareDBEName modA modB]
                         expKept       =
                             -- We don't sort by modified / unmodified here as we currently
                             -- don't list the unmodified ones
