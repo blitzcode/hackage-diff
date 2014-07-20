@@ -96,7 +96,7 @@ For instance, `hackage-diff base 4.6.0.0 4.7.0.0` compares the last two major re
 
 # Modes
 
-`hackage-diff` can operate in there different modes which determine how it obtains and parses the information about the packages to be compared.
+`hackage-diff` can operate in three different modes which determine how it obtains and parses the information about the packages to be compared.
 
 ### downloaddb
 
