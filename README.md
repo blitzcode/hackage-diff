@@ -71,6 +71,8 @@ Comparing Hoogle DBs...
 · Control.Monad.Writer
 
 [+ Added] [- Removed] [× Modified] [· Unmodified]
+
+6 potential breaking changes found
 ```
 
 In the terminal it can also use ANSI colors.
