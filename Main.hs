@@ -266,7 +266,13 @@ computeDiffBuildHoogleDB ComputeParams { .. } =
        liftIO . setCurrentDirectory $ cpTmpDir </> pkg
        -- All the steps required to get the Hoogle DB
        putS "  Creating Sandbox"        >> cabalInstall [ "sandbox", "init"                      ]
-       putS "  Installing Dependencies" >> cabalInstall [ "install", "--dependencies-only", "-j" ]
+       putS "  Installing Dependencies" >> cabalInstall [ "install"
+                                                        , "--dependencies-only"
+                                                        , "-j"
+                                                        , "--disable-optimization"
+                                                        , "--ghc-option=-O0"
+                                                        , "--disable-library-for-ghci"
+                                                        ]
        putS "  Configuring"             >> cabalInstall [ "configure"                            ]
        putS "  Building Haddock"        >> cabalInstall [ "haddock", "--hoogle"                  ]
     -- Read DBs from disk
