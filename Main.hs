@@ -116,7 +116,7 @@ getCmdOpt progName args =
                       "disable progress output"
              ]
 
--- Check a package version string, i.e. name-1.0[.0[.0]]
+-- Check a package version string (1.0[.0[.0]])
 pkgVerParser :: Parser ()
 pkgVerParser = (nDigits 4 <|> nDigits 3 <|> nDigits 2) *> endOfInput
   where digitInt  = void (decimal :: Parser Int)
@@ -141,7 +141,6 @@ cabalInstall args = do
 downloadPackage :: String -> FilePath -> ExceptT String IO ()
 downloadPackage pkg destination = cabalInstall [ "get", pkg, "--destdir=" ++ destination ]
 
--- TODO: Also compare the exports by their type and report changes
 data ExportCmp = EAdded | ERemoved | EModified String {- Old signature -} | EUnmodified
                  deriving (Show, Eq, Ord)
 
