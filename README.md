@@ -1,6 +1,6 @@
 # hackage-diff
 
-Compare the public API of different versions of a Hackage library.
+Compare the public API of different versions of a Hackage library. Detect breaking changes before you update or upload a new version.
 
 Sample output for `hackage-diff cereal 0.2 0.3.5.2`:
 
@@ -62,24 +62,31 @@ Comparing Hoogle DBs...
 6 potential breaking changes found
 ```
 
-In the terminal it can also use ANSI colors.
+Terminal output can be colorized.
 
 # Usage
 
 ```
-hackage-diff | Compare the public API of different versions of a Hackage package
+hackage-diff | Compare the public API of different versions of a Hackage library
 github.com/blitzcode/hackage-diff | www.blitzcode.net | (C) 2014 Tim C. Schroeder
 
-Usage: hackage-diff [options] <package-name> <old-version> <new-version>
-      --mode=[downloaddb|builddb|parsehs]  what to download, how to compare
+Usage: hackage-diff [options] <package-name> <old-version|path> <new-version|path>
+      --mode=[downloaddb|builddb|parsehs]  what to download / read, how to compare
                                              downloaddb - download Hoogle DBs and diff (Default)
                                              builddb    - download packages, build Hoogle DBs and diff
                                              parsehs    - download packages, directly diff .hs exports
   -c  --disable-color                      disable color output
   -s  --silent                             disable progress output
+
+Examples:
+  hackage-diff mtl 2.1 2.2.1
+  hackage-diff --mode=builddb JuicyPixels 3.1.4.1 3.1.5.2
+  hackage-diff conduit 1.1.5 ~/tmp/conduit-1.1.6/dist/doc/html/conduit/conduit.txt
+  hackage-diff --mode=parsehs QuickCheck 2.6 2.7.6
+  hackage-diff --mode=parsehs -s Cabal ~/tmp/Cabal-1.18.0/ 1.20.0.0
 ```
 
-For instance, `hackage-diff base 4.6.0.0 4.7.0.0` compares the last two major releases of `base`.
+As the examples hopefully illustrate, you can choose to specify a local package / Hoogle database file instead of a version to be downloaded from Hackage.
 
 # Modes
 
@@ -87,15 +94,23 @@ For instance, `hackage-diff base 4.6.0.0 4.7.0.0` compares the last two major re
 
 ### downloaddb
 
-Download the Hoogle databases for both packages from Hackage, then parse and diff them. This is the default and recommended mode of operation. Sometimes Hackage does not have a Hoogle database for a particular version available. In this case, running with `builddb` might be more successful.
+Download the Hoogle databases for both packages from Hackage, then parse and diff them. This is the default and recommended mode of operation. Sometimes Hackage does not have a Hoogle database for a particular version available. In this case, running with `builddb` might be more successful. 
+
+Alternatively, you can also specify a path to any local Hoogle database file for one or both versions. This can be used, among other things, to check a package you're working on for breaking API changes relative to what's on Hackage.
 
 ### builddb
 
-Download the package sources from Hackage, setup sandboxes, install dependencies, configure and use Haddock to build the Hoogle databases, parse and diff them. This is often very time consuming due to the dependency installation required for the Haddock build. Sometimes Haddock builds will fail, especially for older packages.
+Download the package sources from Hackage, setup sandboxes, install dependencies, configure and use Haddock to build the Hoogle databases, parse and diff them.
+
+This is often very time consuming due to the dependency installation required for the Haddock build. Sometimes Haddock builds will fail, especially for older packages. As with `downloaddb`, a local Hoogle database file can be specified instead of a version.
 
 ### parsehs
 
-Download the package sources from Hackage, parse `.cabal` file for exported modules, pre-process them with `cpphs`, parse them with `haskel-src-exts` and diff their export lists. This mode has many downsides. Packages making heavy use of the CPP will often fail to be parsed as the pre-processing done here is not identical to what a Cabal build would do. `haskel-src-exts` sometimes fails to parse code that GHC would accept. We only look at the export lists, so modules without an explicit one will fail to be parsed correctly. There's no inspection of the types of exports, only names will be compared.
+Download the package sources from Hackage, parse `.cabal` file for exported modules, pre-process them with `cpphs`, parse them with `haskel-src-exts` and diff their export lists.
+
+This mode has many downsides. Packages making heavy use of the CPP will often fail to be parsed as the pre-processing done here is not identical to what a Cabal build would do. `haskel-src-exts` sometimes fails to parse code that GHC would accept. We only look at the export lists, so modules without an explicit one will fail to be parsed correctly. There's no inspection of the types of exports, only names will be compared.
+
+Instead of a version to download, a path to a local package can be specified instead.
 
 # TODO
 

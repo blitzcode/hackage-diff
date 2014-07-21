@@ -21,6 +21,7 @@ import Control.Exception
 import Control.Concurrent.Async
 import Data.Function
 import Data.List
+import Data.Either
 import Data.Char
 import qualified Data.Text as T
 import qualified Data.Text.IO as TI
@@ -38,34 +39,50 @@ import Network.HTTP
 main :: IO ()
 main = do
     -- Process command line arguments
-    (package, verA, verB, flags) <-
+    (pkgName, argVerA, argVerB, flags) <-
         runExcept <$> (getCmdOpt <$> getProgName <*> getArgs) >>= either die return
-    when (verA == verB) $
-        die "Need to specify different package versions for comparison"
-    let disableColor = FlagDisableColor `elem` flags
-        silentFlag   = FlagSilent       `elem` flags
+    when (argVerA == argVerB) $
+        die "Need to specify different versions / packages for comparison"
     mode <- case foldr (\f r -> case f of FlagMode m -> m; _ -> r) "downloaddb" flags of
                 "downloaddb" -> return ModeDownloadDB
                 "builddb"    -> return ModeBuildDB
                 "parsehs"    -> return ModeParseHS
                 m            -> die $ printf "'%s' is not a valid mode" m
+    let disableColor = FlagDisableColor `elem` flags
+        silentFlag   = FlagSilent       `elem` flags
+    -- Did we get a package version, DB path or package path?
+    ([verA, verB] :: [EitherVerPath]) <- forM [argVerA, argVerB] $ \ver ->
+        case parseOnly pkgVerParser (T.pack ver) of
+            -- Not a version, check if we got a valid DB file or package path
+            Left  _ | mode == ModeParseHS -> do
+                        flip unless (die $ errHdr ++ " or package path" ) =<< doesDirectoryExist ver
+                        return $ Right ver
+                    | otherwise           -> do
+                        flip unless (die $ errHdr ++ " or database path") =<< doesFileExist      ver
+                        return $ Right ver
+                  where errHdr = "'" ++ ver ++ "' is not a valid version string (1.0[.0[.0]])"
+            -- Looks like a valid version string
+            Right _ -> return $ Left ver
     diff <- withTmpDirectory $ \tmpDir -> do
         -- Need to download packages?
         when (mode `elem` [ModeBuildDB, ModeParseHS]) $
-            forM_ [package ++ "-" ++ verA, package ++ "-" ++ verB] $ \pkg -> do
+            forM_ (lefts [verA, verB]) $ \verString -> do
+                let pkg = pkgName ++ "-" ++ verString
                 unless silentFlag . putStrLn $ "Downloading " ++ pkg ++ "..."
                 runExceptT (downloadPackage pkg tmpDir) >>= either die return
         -- Parse, compute difference
         either die return =<<
             ( runExceptT $
-                  let cp = ComputeParams tmpDir package verA verB silentFlag
+                  let cp = ComputeParams tmpDir pkgName verA verB silentFlag
                    in case mode of
                           ModeDownloadDB -> computeDiffDownloadHoogleDB cp
                           ModeBuildDB    -> computeDiffBuildHoogleDB    cp
                           ModeParseHS    -> computeDiffParseHaskell     cp
             )
     -- Output results
-    unless silentFlag $ printf "\n--- Diff for | %s → %s | ---\n\n" verA verB
+    unless silentFlag $ printf "\n--- Diff for | %s → %s | ---\n\n"
+                               (either id id verA)
+                               (either id id verB)
     outputDiff diff disableColor silentFlag
   where die :: String -> IO a
         die str = putStrLn str >> exitFailure
@@ -73,35 +90,32 @@ main = do
 data FlagMode = ModeDownloadDB | ModeBuildDB | ModeParseHS
                 deriving (Eq)
 
-data CmdFlag = FlagDisableColor
-             | FlagSilent
-             | FlagMode String
+data CmdFlag = FlagDisableColor | FlagSilent | FlagMode String
                deriving (Eq)
 
 getCmdOpt :: String -> [String] -> Except String (String, String, String, [CmdFlag])
-getCmdOpt progName args =
+getCmdOpt prgName args =
     case getOpt RequireOrder opt args of
-        (flags, (pkg:verA:verB:[]), []) -> do
-            -- Sanity check package version string
-            forM_ [verA, verB] $ \ver ->
-                case parseOnly pkgVerParser (T.pack ver) of
-                    Left  _ -> throwError $ "'" ++ ver ++
-                                            "' is not a valid package version string " ++
-                                            "(expecting: 1.0[.0[.0]])"
-                    Right _ -> return ()
-            return (pkg, verA, verB, flags)
-        (_, _, [] ) -> throwError usage
-        (_, _, err) -> throwError (concat err ++ "\n" ++ usage)
+        (flags, (pkgName:verA:verB:[]), []) -> return (pkgName, verA, verB, flags)
+        (_, _, [])                          -> throwError usage
+        (_, _, err)                         -> throwError (concat err ++ "\n" ++ usage)
   where
     header =
       "hackage-diff | Compare the public API of different versions of a Hackage library\n" ++
       "github.com/blitzcode/hackage-diff | www.blitzcode.net | (C) 2014 Tim C. Schroeder\n\n" ++
-      "Usage: " ++ progName ++ " [options] <package-name> <old-version> <new-version>"
-    usage  = usageInfo header opt
+      "Usage: " ++ prgName ++ " [options] <package-name> <old-version|path> <new-version|path>"
+    footer =
+      "\nExamples:\n" ++
+      "  " ++ prgName ++ " mtl 2.1 2.2.1\n" ++
+      "  " ++ prgName ++ " --mode=builddb JuicyPixels 3.1.4.1 3.1.5.2\n" ++
+      "  " ++ prgName ++ " conduit 1.1.5 ~/tmp/conduit-1.1.6/dist/doc/html/conduit/conduit.txt\n" ++
+      "  " ++ prgName ++ " --mode=parsehs QuickCheck 2.6 2.7.6\n" ++
+      "  " ++ prgName ++ " --mode=parsehs -s Cabal ~/tmp/Cabal-1.18.0/ 1.20.0.0\n"
+    usage  = usageInfo header opt ++ footer
     opt    = [ Option []
                       ["mode"]
                       (ReqArg FlagMode "[downloaddb|builddb|parsehs]")
-                      ( "what to download, how to compare\n" ++
+                      ( "what to download / read, how to compare\n" ++
                         "  downloaddb - download Hoogle DBs and diff (Default)\n" ++
                         "  builddb    - download packages, build Hoogle DBs and diff\n" ++
                         "  parsehs    - download packages, directly diff .hs exports"
@@ -155,7 +169,7 @@ data ModuleCmp = MAdded [String]                 -- Module was added
 
 type Diff = [(ModuleCmp, String)]
 
--- Print our the computed difference, optionally with ANSI colors
+-- Print out the computed difference, optionally with ANSI colors
 outputDiff :: Diff -> Bool -> Bool -> IO ()
 outputDiff diff disableColor disableLengend = do
     let putStrCol color str
@@ -204,22 +218,23 @@ outputDiff diff disableColor disableLengend = do
 -- data and compute the difference
 data ComputeParams = ComputeParams { cpTmpDir     :: FilePath
                                    , cpPackage    :: String
-                                   , cpVerA       :: String
-                                   , cpVerB       :: String
+                                   , cpVerA       :: EitherVerPath
+                                   , cpVerB       :: EitherVerPath
                                    , cpSilentFlag :: Bool
                                    } deriving (Eq, Show)
 
--- Compute a Diff by comparing the package's Hoogle DB downloaded from Hackage
+-- A package can be specified by a version string, a Hoogle DB file path or a package path
+type VersionString = String
+type EitherVerPath = Either VersionString FilePath
+
+-- Compute a Diff by comparing the package's Hoogle DB read from disk or downloaded from Hackage
 computeDiffDownloadHoogleDB :: ComputeParams -> ExceptT String IO Diff
 computeDiffDownloadHoogleDB ComputeParams { .. } = do
-    -- Download databases. Network.HTTP is kinda crummy, but pulling in http-client/conduit
-    -- just for downloading two small text files is probably not worth it
-    putS "Downloading Hoogle DBs..."
+    -- Get Hoogle databases
+    putS "Downloading / Reading Hoogle DBs..."
     (dbA, dbB) <-
-      either (\(e :: IOException) -> throwError $ "Download Error: " ++ show e ++ tip) return =<<
-        ( liftIO . try $ concurrently (downloadURL $ getHoogleDBURL cpVerA)
-                                      (downloadURL $ getHoogleDBURL cpVerB)
-        )
+        either (\(e :: IOException) -> throwError $ "DB Error: " ++ show e ++ tip) return =<<
+            (liftIO . try $ concurrently (downloadOrRead cpVerA) (downloadOrRead cpVerB))
     -- Parse
     putS "Parsing Hoogle DBs..."
     [parsedDBA, parsedDBB] <- forM [dbA, dbB] $ \db ->
@@ -229,6 +244,8 @@ computeDiffDownloadHoogleDB ComputeParams { .. } = do
     return $ diffHoogleDB parsedDBA parsedDBB
   where getHoogleDBURL ver = "http://hackage.haskell.org/package" </> cpPackage ++ "-" ++ ver </>
                              "docs" </> cpPackage <.> "txt"
+        -- Network.HTTP is kinda crummy, but pulling in http-client/conduit
+        -- just for downloading two small text files is probably not worth it
         downloadURL url = T.pack <$> do
                               req  <- simpleHTTP (getRequest url)
                               -- HTTP will throw an IOException for any connection error,
@@ -240,6 +257,7 @@ computeDiffDownloadHoogleDB ComputeParams { .. } = do
                               getResponseBody req
         tip = "\nYou can try building missing Hoogle DBs yourself by running with --mode=builddb"
         putS = unless cpSilentFlag . liftIO . putStrLn
+        downloadOrRead = either (downloadURL . getHoogleDBURL) (TI.readFile)
 
 -- Compute a Diff by comparing the package's Hoogle DB build through Haddock. Unfortunately,
 -- running Haddock requires to have the package configured with all dependencies
@@ -248,9 +266,8 @@ computeDiffDownloadHoogleDB ComputeParams { .. } = do
 computeDiffBuildHoogleDB :: ComputeParams -> ExceptT String IO Diff
 computeDiffBuildHoogleDB ComputeParams { .. } =
   flip catchError (\e -> throwError $ e ++ tip) $ do
-    let packageA = cpPackage ++ "-" ++ cpVerA
-        packageB = cpPackage ++ "-" ++ cpVerB
-    forM_ [packageA, packageB] $ \pkg -> do
+    forM_ (lefts [cpVerA, cpVerB]) $ \ver -> do -- Only build if we don't have a DB file path
+       let pkg = cpPackage ++ "-" ++ ver
        putS $ "Processing " ++ pkg ++ "..."
        -- TODO: This is rather ugly. Cabal does not allow us to specify the target
        --       directory, and the current directory is not a per-thread property.
@@ -264,20 +281,22 @@ computeDiffBuildHoogleDB ComputeParams { .. } =
        --
        liftIO . setCurrentDirectory $ cpTmpDir </> pkg
        -- All the steps required to get the Hoogle DB
-       putS "  Creating Sandbox"        >> cabalInstall [ "sandbox", "init"                      ]
+       putS "  Creating Sandbox"        >> cabalInstall [ "sandbox", "init"            ]
        putS "  Installing Dependencies" >> cabalInstall [ "install"
                                                         , "--dependencies-only"
+                                                          -- Try building as fast as
+                                                          -- possible
                                                         , "-j"
                                                         , "--disable-optimization"
                                                         , "--ghc-option=-O0"
                                                         , "--disable-library-for-ghci"
                                                         ]
-       putS "  Configuring"             >> cabalInstall [ "configure"                            ]
-       putS "  Building Haddock"        >> cabalInstall [ "haddock", "--hoogle"                  ]
+       putS "  Configuring"             >> cabalInstall [ "configure"                  ]
+       putS "  Building Haddock"        >> cabalInstall [ "haddock", "--hoogle"        ]
     -- Read DBs from disk
     [dbA, dbB] <-
-        forM [packageA, packageB] $ \pkg ->
-            (liftIO . try . TI.readFile $ getHoogleDBPath pkg)
+        forM [cpVerA, cpVerB] $ \ver ->
+            (liftIO . try . TI.readFile $ either getHoogleDBPath id ver)
                 >>= either (\(e :: IOException) -> throwError $ show e) return
     -- Parse
     [parsedDBA, parsedDBB] <- forM [dbA, dbB] $ \db ->
@@ -286,7 +305,8 @@ computeDiffBuildHoogleDB ComputeParams { .. } =
     return $ diffHoogleDB parsedDBA parsedDBB
   where
     putS = unless cpSilentFlag . liftIO . putStrLn
-    getHoogleDBPath ver = cpTmpDir </> ver </> "dist/doc/html" </> cpPackage </> cpPackage <.> "txt"
+    getHoogleDBPath ver = cpTmpDir </> cpPackage ++ "-" ++ ver </> "dist/doc/html" </>
+                          cpPackage </> cpPackage <.> "txt"
     tip = "\nIf downloading / building Hoogle DBs fails, you can try directly parsing " ++
           "the source files by running with --mode=parsehs"
 
@@ -512,13 +532,14 @@ hoogleDBParser = many parseLine
 -- export list
 computeDiffParseHaskell :: ComputeParams -> ExceptT String IO Diff
 computeDiffParseHaskell ComputeParams { .. } = do
-    [mListA, mListB] <- forM [cpPackage ++ "-" ++ cpVerA, cpPackage ++ "-" ++ cpVerB] $ \pkg -> do
-       unless cpSilentFlag . liftIO . putStrLn $ "Processing " ++ pkg ++ "..."
+    [mListA, mListB] <- forM [cpVerA, cpVerB] $ \ver -> do
+       let pkgPath = either (\v -> cpTmpDir </> cpPackage ++ "-" ++ v) id ver
+       unless cpSilentFlag . liftIO . putStrLn $ "Processing " ++ pkgPath ++ "..."
        -- Find .cabal file
-       dotCabal <- (liftIO . findPackageDesc $ cpTmpDir ++ pkg) >>= either throwError return
+       dotCabal <- (liftIO . findPackageDesc $ pkgPath) >>= either throwError return
        -- Parse .cabal file, extract exported modules
        exports  <- condLibrary <$> (liftIO $ readPackageDescription normal dotCabal) >>= \case
-           Nothing   -> throwError $ pkg ++ " is not a library"
+           Nothing   -> throwError $ pkgPath ++ " is not a library"
            Just node -> return $ exposedModules . condTreeData $ node
        -- Build module name / module source file list
        --
@@ -526,7 +547,7 @@ computeDiffParseHaskell ComputeParams { .. } = do
        --       cabal file some more to locate the files
        let modules = flip map exports $
                \m -> ( concat . intersperse "." . components $ m
-                     , cpTmpDir ++ pkg </> toFilePath m <.> "hs" -- TODO: Also .lhs?
+                     , pkgPath </> toFilePath m <.> "hs" -- TODO: Also .lhs?
                      )
        -- Parse modules
        liftIO . forM modules $ \(modName, modPath) -> do
