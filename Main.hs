@@ -412,6 +412,9 @@ compareDBEName a b = case (a, b) of
 -- compare if that fails. Parsing again every time the comparison function is called is
 -- obviously rather slow, but it hasn't been an issue so far
 --
+-- TODO: We should do a name normalization pass on the parsed type, otherwise
+--       'id :: a -> a' and 'id :: b -> b' will be reported as different
+--
 compareDBEType :: DBEntry -> DBEntry -> Bool
 compareDBEType a b =
     -- We assume that a and b are the same kind of export (i.e. they have already been
