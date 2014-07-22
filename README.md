@@ -96,7 +96,7 @@ As the examples hopefully illustrate, you can choose to specify a local package 
 
 Download the Hoogle databases for both packages from Hackage, then parse and diff them. This is the default and recommended mode of operation. Sometimes Hackage does not have a Hoogle database for a particular version available. In this case, running with `builddb` might be more successful. 
 
-Alternatively, you can also specify a path to any local Hoogle database file for one or both versions. This can be used, among other things, to check a package you're working on for breaking API changes relative to what's on Hackage.
+Alternatively, you can also specify a path to any local Hoogle database file for one or both versions. The default way to build one is `cabal haddock --hoogle`, outputting to `dist/doc/html/mypackage/mypackage.txt`. This can be used, among other things, to check a package you're working on for breaking API changes relative to what's on Hackage.
 
 ### builddb
 
