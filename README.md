@@ -2,6 +2,8 @@
 
 Compare the public API of different versions of a Hackage library. Detect breaking changes before you update or upload a new version.
 
+Also available on [Hackage](http://hackage.haskell.org/package/hackage-diff).
+
 Sample output for `hackage-diff cereal 0.2 0.3.5.2`:
 
 ```
