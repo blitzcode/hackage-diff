@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                hackage-diff
-version:             0.1.0.0
+version:             0.1.0.1
 synopsis:            Compare the public API of different versions of a Hackage library
 description:         Please see <https://github.com/blitzcode/hackage-diff github.com/blitzcode/hackage-diff> for a user's manual.
                      .
@@ -82,7 +82,7 @@ executable hackage-diff
   main-is:             Main.hs
   -- other-modules:
   -- other-extensions:
-  build-depends:       base             >=4.7 && <4.8,
+  build-depends:       base             >=4.8,
                        Cabal            >=1.20.0.0,
                        haskell-src-exts >=1.15.0,
                        ansi-terminal    >=0.6.1.1,

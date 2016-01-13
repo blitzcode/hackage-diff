@@ -84,8 +84,6 @@ main = do
                                (either id id verA)
                                (either id id verB)
     outputDiff diff disableColor silentFlag
-  where die :: String -> IO a
-        die str = putStrLn str >> exitFailure
 
 data FlagMode = ModeDownloadDB | ModeBuildDB | ModeParseHS
                 deriving (Eq)
