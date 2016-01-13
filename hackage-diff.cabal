@@ -68,7 +68,7 @@ author:              Tim C. Schroeder
 maintainer:          www.blitzcode.net
 homepage:            https://github.com/blitzcode/hackage-diff
 bug-reports:         https://github.com/blitzcode/hackage-diff/issues
-copyright:           (C) 2014 Tim C. Schroeder
+copyright:           (C) 2016 Tim C. Schroeder
 category:            Distribution
 build-type:          Simple
 -- extra-source-files:  

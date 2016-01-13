@@ -102,7 +102,7 @@ getCmdOpt prgName args =
   where
     header =
       "hackage-diff | Compare the public API of different versions of a Hackage library\n" ++
-      "github.com/blitzcode/hackage-diff | www.blitzcode.net | (C) 2014 Tim C. Schroeder\n\n" ++
+      "github.com/blitzcode/hackage-diff | www.blitzcode.net | (C) 2016 Tim C. Schroeder\n\n" ++
       "Usage: " ++ prgName ++ " [options] <package-name> <old-version|path> <new-version|path>"
     footer =
       "\nExamples:\n" ++
