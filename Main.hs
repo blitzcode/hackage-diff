@@ -238,7 +238,7 @@ computeDiffDownloadHoogleDB ComputeParams { .. } = do
     -- Parse
     putS "Parsing Hoogle DBs..."
     [parsedDBA, parsedDBB] <- forM [dbA, dbB] $ \db ->
-        either throwError return $ parseOnly hoogleDBParser db
+        either throwError return $ parseOnly (hoogleDBParser <* endOfInput) db
     -- Compare
     putS "Comparing Hoogle DBs..."
     return $ diffHoogleDB parsedDBA parsedDBB
