@@ -26,6 +26,7 @@ import Data.Char
 import qualified Data.Text as T
 import qualified Data.Text.IO as TI
 import Data.Attoparsec.Text hiding (try)
+import Data.Attoparsec.Combinator (lookAhead)
 import Text.Printf
 import Distribution.PackageDescription
 import Distribution.PackageDescription.Parse
@@ -237,6 +238,8 @@ computeDiffDownloadHoogleDB ComputeParams { .. } = do
     putS "Parsing Hoogle DBs..."
     [parsedDBA, parsedDBB] <- forM [dbA, dbB] $ \db ->
         either throwError return $ parseOnly (hoogleDBParser <* endOfInput) db
+    -- Debug parser in GHCi: parseOnly hoogleDBParser <$> TI.readFile "base.txt" >>=
+    --                           \(Right db) -> mapM_ (putStrLn . show) db
     -- Compare
     putS "Comparing Hoogle DBs..."
     return $ diffHoogleDB parsedDBA parsedDBB
@@ -495,10 +498,14 @@ hoogleDBParser = many parseLine
                     ( (DBNewtype <$> takeTill (`elem` [ ' ', '\n' ]) <* endOfLine <*> "") <|>
                       (DBNewtype <$> takeTill (== ' ') <* skipSpace <*> tillEoL)
                     )
-    parseCtor     = do peekChar' >>= flip unless (fail "lowercase") . isAsciiUpper
+                    -- TODO: At some point Hoogle DBs started to have Ctors and functions
+                    --       names wrapped in brackets. Not sure what's up with that, just
+                    --       parse them as part of the name so the parser doesn't stop
+    parseCtor     = do void . lookAhead $ satisfy isAsciiUpper <|>
+                                          (char '[' *> satisfy isAsciiUpper)
                        DBCtor <$> takeTill (== ' ') <* string " :: " <*> tillEoL
-    parseFunction = do peekChar' >>=
-                           flip unless (fail "uppercase") . (\c -> isAsciiLower c || c == '(')
+                    -- TODO: This doesn't parse function lists correctly
+    parseFunction = do void . lookAhead $ satisfy isAsciiLower <|> char '[' <|> char '('
                        DBFunction <$> takeTill (== ' ') <* string " :: " <*> tillEoL
     parseInstance = do void $ string "instance "
                        line <- T.words <$> tillEoL
