@@ -569,7 +569,7 @@ computeDiffParseHaskell ComputeParams { .. } = do
     return $ comparePackageModules mListA mListB
 
 -- Parse a Haskell module interface using haskell-src-exts and cpphs
-parseModule :: FilePath -> IO (Either String Module)
+--parseModule :: FilePath -> IO (Either String )
 parseModule modPath = runExceptT $ do
     (liftIO $ doesFileExist modPath) >>= flip unless
         (throwError $ "Can't open source file '" ++ modPath ++ "'")
@@ -590,10 +590,50 @@ parseModule modPath = runExceptT $ do
                       Right (E.ParseOk parsedModule) ->
                           return parsedModule
 
-type PackageModuleList = [(String, Maybe Module)]
+--PackageModuleList  :: [(String, Maybe (Module SrcSpanInfo))] -> PackageModuleList l
+
+newtype PackageModuleList l = PackageModuleList [(String, Maybe  (Module SrcSpanInfo ))]
+--                                                                 Maybe (
+--                                                                     ModuleHead (
+--                                                                  ModuleName(l String),
+--                                                                           Maybe (WarningText),
+--                                                                           Maybe (ExportSpecList),
+--                                                                           ModuleHead)
+--                                                                     ),
+--                                                                 [ModulePragma ],
+--                                                                 [ImportDecl ],
+--                                                                   [Decl ],
+--                                                                   Module      
+--                                                                    ) )) ])
+--type PackageModuleList = [(String, Maybe  (Module   )) ]
+
+moduleExports :: Module SrcSpanInfo -> [SrcSpan]
+moduleExports x = 
+  case x of
+    Module mh _ _ _ _  -> --exportSpec
+      case mh of
+        SrcSpanInfo i j -> j
+        --the type of SrcSpanInfo is :
+          -- SrcSpanInfo :: SrcSpan -> [SrcSpan] -> SrcSpanInfo
+          -- SrcSpan :: String -> Int -> Int -> Int -> Int -> SrcSpan
+        
+        -- ModuleHead _ _ _ foo -> 
+        --   case foo of
+        --     Just x ->
+        --       case x of
+        --         ExportSpecList a exportSpec -> exportSpec
+                                    
+          
+--Module SrcSpanInfo a ->
+--      a
+--        moduleExports (Module (ModuleHead _ _ _ (Just (ExportSpecList _ exportSpec)) ) _ _ _ _ ) = exportSpec
+--        moduleExports _                                      = []
 
 -- Compare two packages made up of readily parsed Haskell modules
-comparePackageModules :: PackageModuleList -> PackageModuleList -> Diff
+--comparePackageModules :: PackageModuleList  -> PackageModuleList  -> Diff
+--modulesAdded  verB verA  = allANotInBBy ((==) `on` fst) verB verA
+        
+comparePackageModules  :: Eq a => [(a, Maybe (Module SrcSpanInfo))] -> [(a, Maybe (Module SrcSpanInfo))] -> [(ModuleCmp, a)]
 comparePackageModules verA verB = do
     let -- Compare lists of modules
         modulesAdded   = allANotInBBy ((==) `on` fst) verB verA
@@ -633,8 +673,9 @@ comparePackageModules verA verB = do
                                      expUnmodified = intersectBy  (==) (moduleExports modA)
                                                                        (moduleExports modB)
         -- TODO: If the module does not have an export spec, we assume it exports nothing
-        moduleExports (Module _ _ _ _ (Just exportSpec) _ _) = exportSpec
-        moduleExports _                                      = []
+                    --          1           2           3          4
+                    -- Module ModuleHead ModulePragma ImportDecl Decl
+                    -- (Num [Decl l], Num [ImportDecl l], Num [ModulePragma l],  Num (Maybe (ModuleHead l)), Num l) =>
         findModule mlist mname = maybe Nothing snd $ find ((== mname) . fst) mlist
      in resAdded ++ resRemoved ++ resKept
 
