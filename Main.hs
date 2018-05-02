@@ -546,7 +546,7 @@ computeDiffParseHaskell ComputeParams { .. } = do
        -- Find .cabal file
        dotCabal <- (liftIO . findPackageDesc $ pkgPath) >>= either throwError return
        -- Parse .cabal file, extract exported modules
-       exports  <- condLibrary <$> (liftIO $ readPackageDescription normal dotCabal) >>= \case
+       exports  <- condLibrary <$> (liftIO $ readGenericPackageDescription normal dotCabal) >>= \case
            Nothing   -> throwError $ pkgPath ++ " is not a library"
            Just node -> return $ exposedModules . condTreeData $ node
        -- Build module name / module source file list
@@ -569,7 +569,7 @@ computeDiffParseHaskell ComputeParams { .. } = do
     return $ comparePackageModules mListA mListB
 
 -- Parse a Haskell module interface using haskell-src-exts and cpphs
-parseModule :: FilePath -> IO (Either String Module)
+parseModule :: FilePath -> IO (Either String (Module SrcSpanInfo))
 parseModule modPath = runExceptT $ do
     (liftIO $ doesFileExist modPath) >>= flip unless
         (throwError $ "Can't open source file '" ++ modPath ++ "'")
@@ -590,7 +590,7 @@ parseModule modPath = runExceptT $ do
                       Right (E.ParseOk parsedModule) ->
                           return parsedModule
 
-type PackageModuleList = [(String, Maybe Module)]
+type PackageModuleList = [(String, Maybe (Module SrcSpanInfo))]
 
 -- Compare two packages made up of readily parsed Haskell modules
 comparePackageModules :: PackageModuleList -> PackageModuleList -> Diff
@@ -633,8 +633,8 @@ comparePackageModules verA verB = do
                                      expUnmodified = intersectBy  (==) (moduleExports modA)
                                                                        (moduleExports modB)
         -- TODO: If the module does not have an export spec, we assume it exports nothing
-        moduleExports (Module _ _ _ _ (Just exportSpec) _ _) = exportSpec
-        moduleExports _                                      = []
+        moduleExports (Module _ (Just (ModuleHead _ _ _ (Just (ExportSpecList _ exportSpec)))) _ _ _ ) = exportSpec
+        moduleExports _                                                                                = []
         findModule mlist mname = maybe Nothing snd $ find ((== mname) . fst) mlist
      in resAdded ++ resRemoved ++ resKept
 
